@@ -1,0 +1,51 @@
+# ניטור חיצוני של מליסה (08.10.2026). רץ מחוץ למחשב של רביד ומחוץ ל-Fly, ולכן רואה בדיוק
+# את מה שמטופלת רואה כשהמחשב כבוי. התרעה רק במעבר מצב: נפלה, וחזרה. לא כל 5 דקות.
+name: uptime
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch:
+    inputs:
+      test:
+        description: "שליחת התרעת בדיקה"
+        type: boolean
+        default: false
+permissions:
+  actions: write
+concurrency: uptime
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TG_TOKEN: ${{ secrets.TG_TOKEN }}
+          TG_CHAT: ${{ secrets.TG_CHAT }}
+          TG_TOPIC: ${{ secrets.TG_TOPIC }}
+          TEST: ${{ inputs.test }}
+        run: |
+          tg() { curl -s -o /dev/null "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
+                 --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "message_thread_id=${TG_TOPIC}" \
+                 --data-urlencode "text=$1"; }
+          now=$(TZ=Asia/Jerusalem date +%H:%M)
+          if [ "$TEST" = "true" ]; then
+            tg "🧪 התרעת בדיקה מהניטור החיצוני של מליסה (${now}). הניטור רץ, ואם app.ravidclinic.com לא עונה, תגיע לכאן הודעה."
+            exit 0
+          fi
+          ok=0
+          for i in 1 2 3; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 https://app.ravidclinic.com/ || echo 000)
+            [ "$code" = "200" ] && { ok=1; break; }
+            sleep 20
+          done
+          prev=$(gh run list -R "$GITHUB_REPOSITORY" -w uptime.yml -e schedule -s completed -L 1 --json conclusion -q '.[0].conclusion' || echo success)
+          if [ $ok = 0 ] && [ "$prev" != "failure" ]; then
+            tg "⛔ מליסה לא עונה מ-${now} (קוד ${code}, שלושה ניסיונות). דרך חזרה: py build/melissa/tools/release.py fallback"
+          elif [ $ok = 1 ] && [ "$prev" = "failure" ]; then
+            tg "✅ מליסה חזרה לענות (${now})."
+          fi
+          # ריפו ציבורי בלי פעילות 60 יום: GitHub משבית את התזמון. פעם ביום מאשרים אותו מחדש
+          [ "$(date -u +%H%M)" \< "0005" ] && gh api -X PUT "repos/$GITHUB_REPOSITORY/actions/workflows/uptime.yml/enable" || true
+          [ $ok = 1 ]
