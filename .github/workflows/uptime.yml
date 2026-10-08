@@ -28,7 +28,7 @@ jobs:
         run: |
           tg() { curl -s -o /dev/null "https://api.telegram.org/bot${TG_TOKEN}/sendMessage" \
                  --data-urlencode "chat_id=${TG_CHAT}" --data-urlencode "message_thread_id=${TG_TOPIC}" \
-                 --data-urlencode "text=$1"; }
+                 --data-urlencode "text=$1" || true; }
           now=$(TZ=Asia/Jerusalem date +%H:%M)
           if [ "$TEST" = "true" ]; then
             tg "🧪 התרעת בדיקה מהניטור החיצוני של מליסה (${now}). הניטור רץ, ואם app.ravidclinic.com לא עונה, תגיע לכאן הודעה."
